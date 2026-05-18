@@ -55,7 +55,7 @@ export const blogResponseSchema = z.object({
 
 export type ExtractedKeyword = {
   keyword: string;
-  source: "Ahrefs" | "Search Console";
+  source: "Ahrefs" | "Search Console" | "Suggested";
   volume?: number;
   traffic?: number;
   position?: number;

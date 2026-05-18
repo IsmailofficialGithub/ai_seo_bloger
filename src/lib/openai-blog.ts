@@ -5,6 +5,7 @@ import {
   blogResponseSchema,
   type BlogRequest,
   type BlogResponse,
+  type ExtractedKeyword,
 } from "@/lib/seo-schema";
 import type { SeoData } from "@/lib/seo-providers";
 
@@ -57,11 +58,30 @@ const blogJsonSchema = {
   },
 } as const;
 
-function buildBlogPrompt(input: BlogRequest, seoData: SeoData) {
-  const secondaryKeywords = [
-    "Use Ahrefs organic keyword data to identify 2-5 natural secondary keywords.",
-    "If data is thin, infer close variants from the primary keyword and flag assumptions.",
-  ].join(" ");
+function formatExtractedKeywords(keywords: ExtractedKeyword[]) {
+  return keywords
+    .map((keyword, index) => {
+      const metrics = [
+        keyword.volume ? `volume ${keyword.volume}` : "",
+        keyword.traffic ? `traffic ${keyword.traffic}` : "",
+        keyword.clicks ? `clicks ${keyword.clicks}` : "",
+        keyword.impressions ? `impressions ${keyword.impressions}` : "",
+        keyword.position ? `position ${keyword.position.toFixed(1)}` : "",
+      ].filter(Boolean);
+
+      return `${index + 1}. ${keyword.keyword} (${keyword.source}${
+        metrics.length ? `, ${metrics.join(", ")}` : ""
+      })`;
+    })
+    .join("\n");
+}
+
+function buildBlogPrompt(
+  input: BlogRequest,
+  seoData: SeoData,
+  extractedKeywords: ExtractedKeyword[],
+) {
+  const requiredKeywords = formatExtractedKeywords(extractedKeywords);
 
   const semanticEntities = [
     "Use Ahrefs top pages, Ahrefs metrics, and Google Search Console query/page data for semantic entities and LSI terms.",
@@ -80,7 +100,8 @@ function buildBlogPrompt(input: BlogRequest, seoData: SeoData) {
 
 You will be given:
 - PRIMARY KEYWORD: ${input.mainKeyword}
-- SECONDARY KEYWORDS: ${secondaryKeywords}
+- REQUIRED KEYWORDS TO USE IN THE FINAL BLOG CONTENT:
+${requiredKeywords}
 - SEMANTIC ENTITIES / LSI TERMS: ${semanticEntities}
 - SEARCH INTENT: informational / commercial / navigational / transactional
 - TARGET AUDIENCE: ${input.targetAudience}
@@ -160,14 +181,22 @@ EVIDENCE RULES:
 
 FORMATTING RULES:
 - Do not use Markdown header syntax like ## or ### for points, sub-items, lists, or structural structural text elements within content blocks. Use standard text lists or numbered steps instead.
+- Do not use asterisks for bold text. Do not wrap headings or important phrases in ** markers.
 - Do not include emojis or pictograms anywhere in the text or headers.
 - Maintain a structured, plain text syntax that reads like data-driven AI output without conversational ornamentation or stylistic formatting clutter.
 - No paragraph over 5 sentences. Most paragraphs: 1–3 sentences.
 - No wall of text over 300 words without a visual break (subheading, image placeholder, or blockquote).
-- Bold the single most important takeaway per section — one phrase or sentence only, not whole paragraphs.
+- Keep headings as plain text lines. The app will style them visually.
 - Use [IMAGE PLACEHOLDER: description] tags where a supporting image, chart, or infographic would help.
 - Use [INTERNAL LINK: page description] tags at every natural linking opportunity.
 - Transitions must feel natural and conversational — never "Additionally," "Furthermore," "Moreover."
+
+KEYWORD RULES:
+- Use every REQUIRED KEYWORD in the Complete Blog Post field at least once.
+- Use 10 to 12 REQUIRED KEYWORDS naturally in headings, intro, body, FAQ, or closing.
+- Do not stuff keywords. If a keyword is awkward, use it once in a natural sentence.
+- Keep exact spelling from the REQUIRED KEYWORDS list, even if it contains a typo from the user input.
+- Do not invent a different keyword list.
 
 TONE:
 - Conversational but authoritative. The reader is smart — don't over-explain.
@@ -234,7 +263,7 @@ Fluff Test:
 □ No restated ideas in different words
 □ No qualifiers that add nothing (very, really, extremely, quite, basically, essentially)
 
-After fixing all FAILs, output the final clean post followed by the SEO block.
+After fixing all FAILs, output the final clean post in the Complete Blog Post field. Keep planning, audit, and self-check information only in their JSON fields.
 
 ---
 
@@ -254,6 +283,7 @@ ${JSON.stringify(seoData, null, 2)}`;
 export async function generateSeoBlog(
   input: BlogRequest,
   seoData: SeoData,
+  extractedKeywords: ExtractedKeyword[],
 ): Promise<BlogResponse> {
   if (!process.env.OPENAI_API_KEY) {
     throw new Error("Missing OPENAI_API_KEY.");
@@ -267,7 +297,7 @@ export async function generateSeoBlog(
     model: process.env.OPENAI_MODEL || "gpt-5.5",
     instructions:
       "Follow the user's writing prompt exactly. Return each final output section in the matching JSON field. Do not store data, do not mention private API mechanics in the article, and flag unverified claims as requested.",
-    input: buildBlogPrompt(input, seoData),
+    input: buildBlogPrompt(input, seoData, extractedKeywords),
     text: {
       format: {
         type: "json_schema",
@@ -281,4 +311,3 @@ export async function generateSeoBlog(
   const parsed = JSON.parse(response.output_text);
   return blogResponseSchema.parse(parsed);
 }
-

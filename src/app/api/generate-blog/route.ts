@@ -11,8 +11,8 @@ export async function POST(request: Request) {
     const body = await request.json();
     const input = blogRequestSchema.parse(body);
     const seoData = await fetchSeoData(input);
-    const extractedKeywords = extractSeoKeywords(seoData);
-    const blog = await generateSeoBlog(input, seoData);
+    const extractedKeywords = extractSeoKeywords(seoData, input.mainKeyword);
+    const blog = await generateSeoBlog(input, seoData, extractedKeywords);
 
     return NextResponse.json({ blog, extractedKeywords });
   } catch (error) {

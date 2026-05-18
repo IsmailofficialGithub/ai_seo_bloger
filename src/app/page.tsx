@@ -53,42 +53,13 @@ const lengthOptions = [
   "Long, 1,800 to 2,400 words",
 ];
 
-function formatBlogForCopy(blog: BlogResponse) {
+function formatBlogForCopy(blog: BlogResponse, keywords: ExtractedKeyword[]) {
   return [
-    "1. Intent Analysis",
-    blog.intentAnalysis,
+    "Keywords",
+    keywords.map((keyword) => keyword.keyword).join(", "),
     "",
-    "2. Full Outline with image placeholders, internal link slots, EEAT notes",
-    blog.fullOutline,
-    "",
-    "3. Research & Evidence Plan",
-    blog.researchEvidencePlan,
-    "",
-    "4. Complete Blog Post",
-    blog.completeBlogPost,
-    "",
-    "5. SEO Block",
-    `Title tag: ${blog.seoBlock.metadata.titleTag}`,
-    `Meta description: ${blog.seoBlock.metadata.metaDescription}`,
-    `URL slug: ${blog.seoBlock.metadata.urlSlug}`,
-    "",
-    "Keyword placement audit:",
-    blog.seoBlock.keywordPlacementAudit,
-    "",
-    "Schema opportunities:",
-    blog.seoBlock.schemaOpportunities,
-    "",
-    "Internal linking summary:",
-    blog.seoBlock.internalLinkingSummary,
-    "",
-    "External linking suggestions:",
-    blog.seoBlock.externalLinkingSuggestions,
-    "",
-    "Image/alt text suggestions:",
-    blog.seoBlock.imageAltTextSuggestions,
-    "",
-    "6. Self-Check Results",
-    blog.selfCheckResults,
+    "Blog Content",
+    stripTextMarkers(blog.completeBlogPost),
   ].join("\n");
 }
 
@@ -103,7 +74,10 @@ export default function Home() {
   const [isGenerating, setIsGenerating] = useState(false);
   const [copied, setCopied] = useState(false);
 
-  const copyText = useMemo(() => (blog ? formatBlogForCopy(blog) : ""), [blog]);
+  const copyText = useMemo(
+    () => (blog ? formatBlogForCopy(blog, extractedKeywords) : ""),
+    [blog, extractedKeywords],
+  );
 
   function updateField(name: keyof BlogRequest, value: string) {
     setForm((current) => ({ ...current, [name]: value }));
@@ -349,76 +323,15 @@ export default function Home() {
               <div className="flex min-h-[480px] items-center justify-center rounded-md border border-dashed border-slate-300 bg-slate-50 px-6 text-center text-sm leading-6 text-slate-500">
                 {isGenerating
                   ? "Fetching SEO data and writing the blog..."
-                  : "Generated SEO title, metadata, outline, article, FAQs, links, image prompt, and SEO score suggestions will show here."}
+                  : "Generated keywords and final blog content will show here."}
               </div>
             ) : (
               <article className="space-y-7">
+                <KeywordResult keywords={extractedKeywords} />
                 <ResultBlock
-                  title="1. Intent Analysis"
-                  content={blog.intentAnalysis}
-                />
-                <ResultBlock
-                  title="2. Full Outline"
-                  content={blog.fullOutline}
-                />
-                <ResultBlock
-                  title="3. Research & Evidence Plan"
-                  content={blog.researchEvidencePlan}
-                />
-                <ResultBlock
-                  title="4. Complete Blog Post"
+                  keywords={extractedKeywords}
+                  title="Blog Content"
                   content={blog.completeBlogPost}
-                />
-
-                <section className="space-y-3">
-                  <h2 className="text-lg font-semibold">5. SEO Block</h2>
-                  <div className="space-y-3 rounded-md border border-slate-200 bg-white p-4 text-sm leading-7 text-slate-700">
-                    <p>
-                      <span className="font-medium text-slate-950">
-                        Title tag:
-                      </span>{" "}
-                      {blog.seoBlock.metadata.titleTag}
-                    </p>
-                    <p>
-                      <span className="font-medium text-slate-950">
-                        Meta description:
-                      </span>{" "}
-                      {blog.seoBlock.metadata.metaDescription}
-                    </p>
-                    <p>
-                      <span className="font-medium text-slate-950">
-                        URL slug:
-                      </span>{" "}
-                      <span className="font-mono">
-                        {blog.seoBlock.metadata.urlSlug}
-                      </span>
-                    </p>
-                    <SubBlock
-                      title="Keyword placement audit"
-                      content={blog.seoBlock.keywordPlacementAudit}
-                    />
-                    <SubBlock
-                      title="Schema opportunities"
-                      content={blog.seoBlock.schemaOpportunities}
-                    />
-                    <SubBlock
-                      title="Internal linking summary"
-                      content={blog.seoBlock.internalLinkingSummary}
-                    />
-                    <SubBlock
-                      title="External linking suggestions"
-                      content={blog.seoBlock.externalLinkingSuggestions}
-                    />
-                    <SubBlock
-                      title="Image/alt text suggestions"
-                      content={blog.seoBlock.imageAltTextSuggestions}
-                    />
-                  </div>
-                </section>
-
-                <ResultBlock
-                  title="6. Self-Check Results"
-                  content={blog.selfCheckResults}
                 />
               </article>
             )}
@@ -440,28 +353,38 @@ function FieldError({ message }: { message?: string }) {
 function ResultBlock({
   title,
   content,
+  keywords = [],
 }: {
   title: string;
   content: string;
+  keywords?: ExtractedKeyword[];
 }) {
   return (
     <section className="space-y-2">
       <h2 className="text-lg font-semibold">{title}</h2>
       <div className="rounded-md border border-slate-200 bg-white p-4 text-sm leading-7 text-slate-700">
-        <FormattedText content={content} />
+        <FormattedText content={content} keywords={keywords} />
       </div>
     </section>
   );
 }
 
-function SubBlock({ title, content }: { title: string; content: string }) {
+function KeywordResult({ keywords }: { keywords: ExtractedKeyword[] }) {
   return (
-    <div className="border-t border-slate-100 pt-3">
-      <h3 className="font-medium text-slate-950">{title}</h3>
-      <div className="mt-1 text-slate-700">
-        <FormattedText content={content} />
+    <section className="space-y-2">
+      <h2 className="text-lg font-semibold">Keywords</h2>
+      <div className="flex flex-wrap gap-2 rounded-md border border-slate-200 bg-white p-4">
+        {keywords.map((keyword) => (
+          <span
+            className="rounded-md border border-blue-200 bg-blue-50 px-2.5 py-1 text-xs font-semibold text-blue-700"
+            key={`${keyword.source}-${keyword.keyword}`}
+            title={formatKeywordMetrics(keyword)}
+          >
+            {keyword.keyword}
+          </span>
+        ))}
       </div>
-    </div>
+    </section>
   );
 }
 
@@ -477,7 +400,7 @@ function ExtractedKeywords({ keywords }: { keywords: ExtractedKeyword[] }) {
           Extracted API keywords
         </h3>
         <p className="mt-1 text-xs leading-5 text-emerald-800">
-          Pulled from Ahrefs and Search Console for this generation.
+          Pulled from Ahrefs and Search Console; suggested variants fill gaps if data is thin.
         </p>
       </div>
       <div className="flex flex-wrap gap-2">
@@ -507,11 +430,26 @@ function formatKeywordMetrics(keyword: ExtractedKeyword) {
   return [keyword.source, ...metrics].join(" | ");
 }
 
-function FormattedText({ content }: { content: string }) {
+function FormattedText({
+  content,
+  keywords = [],
+}: {
+  content: string;
+  keywords?: ExtractedKeyword[];
+}) {
+  const highlightedKeywords = useMemo(
+    () =>
+      Array.from(new Set(keywords.map((keyword) => keyword.keyword.trim())))
+        .filter(Boolean)
+        .sort((a, b) => b.length - a.length),
+    [keywords],
+  );
+
   return (
     <div className="space-y-1">
       {content.split("\n").map((line, index) => {
-        const formattedLine = formatHeadingLine(line);
+        const cleanedLine = stripTextMarkers(line);
+        const formattedLine = formatHeadingLine(cleanedLine);
 
         if (!line.trim()) {
           return <div aria-hidden="true" className="h-3" key={index} />;
@@ -526,12 +464,54 @@ function FormattedText({ content }: { content: string }) {
             }
             key={index}
           >
-            {formattedLine.text}
+            <HighlightedText
+              keywords={highlightedKeywords}
+              text={formattedLine.text}
+            />
           </p>
         );
       })}
     </div>
   );
+}
+
+function HighlightedText({
+  text,
+  keywords,
+}: {
+  text: string;
+  keywords: string[];
+}) {
+  if (keywords.length === 0) {
+    return text;
+  }
+
+  const pattern = new RegExp(`(${keywords.map(escapeRegExp).join("|")})`, "gi");
+  const parts = text.split(pattern);
+
+  return parts.map((part, index) => {
+    const isKeyword = keywords.some(
+      (keyword) => keyword.toLowerCase() === part.toLowerCase(),
+    );
+
+    if (!isKeyword) {
+      return <span key={index}>{part}</span>;
+    }
+
+    return (
+      <span className="font-semibold text-blue-700" key={index}>
+        {part}
+      </span>
+    );
+  });
+}
+
+function escapeRegExp(value: string) {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
+function stripTextMarkers(value: string) {
+  return value.replace(/\*\*/g, "");
 }
 
 function formatHeadingLine(line: string) {

@@ -1,4 +1,5 @@
 import { google } from "googleapis";
+import fs from "node:fs";
 
 import type { BlogRequest, ExtractedKeyword } from "@/lib/seo-schema";
 
@@ -6,6 +7,8 @@ type AhrefsPayload = {
   organicKeywords: unknown;
   topPages: unknown;
   metrics: unknown;
+  referringDomainsHistory: unknown;
+  referringDomains: unknown;
 };
 
 type GscPayload = {
@@ -64,8 +67,50 @@ function findRows(value: unknown): unknown[] {
   return [];
 }
 
-export function extractSeoKeywords(seoData: SeoData): ExtractedKeyword[] {
-  const keywordMap = new Map<string, ExtractedKeyword>();
+function addKeyword(
+  keywordMap: Map<string, ExtractedKeyword>,
+  keyword: string,
+  values: ExtractedKeyword,
+) {
+  const normalized = keyword.trim().toLowerCase();
+  const existing = keywordMap.get(normalized);
+
+  keywordMap.set(normalized, {
+    ...existing,
+    ...values,
+    keyword: existing?.keyword ?? keyword.trim(),
+  });
+}
+
+function fallbackKeywordVariants(primaryKeyword: string) {
+  const keyword = primaryKeyword.trim();
+
+  if (!keyword) {
+    return [];
+  }
+
+  return [
+    keyword,
+    `best ${keyword}`,
+    `${keyword} reviews`,
+    `${keyword} guide`,
+    `${keyword} price`,
+    `${keyword} alternatives`,
+    `${keyword} discount code`,
+    `${keyword} carry on`,
+    `${keyword} luggage`,
+    `${keyword} travel`,
+    `${keyword} bags`,
+    `${keyword} set`,
+  ];
+}
+
+export function extractSeoKeywords(
+  seoData: SeoData,
+  primaryKeyword: string,
+): ExtractedKeyword[] {
+  const ahrefsKeywordMap = new Map<string, ExtractedKeyword>();
+  const gscKeywordMap = new Map<string, ExtractedKeyword>();
 
   findRows(seoData.ahrefs.organicKeywords).forEach((row) => {
     const record = toRecord(row);
@@ -76,12 +121,34 @@ export function extractSeoKeywords(seoData: SeoData): ExtractedKeyword[] {
 
     const keyword = record.keyword.trim();
 
-    keywordMap.set(keyword.trim().toLowerCase(), {
+    addKeyword(ahrefsKeywordMap, keyword, {
       keyword,
       source: "Ahrefs",
       volume: toNumber(record.volume),
       traffic: toNumber(record.sum_traffic),
       position: toNumber(record.best_position),
+    });
+  });
+
+  findRows(seoData.ahrefs.topPages).forEach((row) => {
+    const record = toRecord(row);
+
+    if (!record || typeof record.top_keyword !== "string") {
+      return;
+    }
+
+    const keyword = record.top_keyword.trim();
+
+    if (!keyword) {
+      return;
+    }
+
+    addKeyword(ahrefsKeywordMap, keyword, {
+      keyword,
+      source: "Ahrefs",
+      volume: toNumber(record.top_keyword_volume),
+      traffic: toNumber(record.sum_traffic),
+      position: toNumber(record.top_keyword_best_position),
     });
   });
 
@@ -99,9 +166,9 @@ export function extractSeoKeywords(seoData: SeoData): ExtractedKeyword[] {
     }
 
     const normalized = keyword.trim().toLowerCase();
-    const existing = keywordMap.get(normalized);
+    const existing = ahrefsKeywordMap.get(normalized) ?? gscKeywordMap.get(normalized);
 
-    keywordMap.set(normalized, {
+    gscKeywordMap.set(normalized, {
       ...existing,
       keyword: existing?.keyword ?? keyword.trim(),
       source: existing?.source ?? "Search Console",
@@ -111,13 +178,40 @@ export function extractSeoKeywords(seoData: SeoData): ExtractedKeyword[] {
     });
   });
 
+  const keywordMap = new Map<string, ExtractedKeyword>();
+  const sortedAhrefs = Array.from(ahrefsKeywordMap.values()).sort((a, b) => {
+    const aScore = a.traffic ?? a.volume ?? 0;
+    const bScore = b.traffic ?? b.volume ?? 0;
+    return bScore - aScore;
+  });
+  const sortedGsc = Array.from(gscKeywordMap.values()).sort((a, b) => {
+    const aScore = a.clicks ?? a.impressions ?? 0;
+    const bScore = b.clicks ?? b.impressions ?? 0;
+    return bScore - aScore;
+  });
+
+  [...sortedAhrefs, ...sortedGsc].forEach((keyword) => {
+    addKeyword(keywordMap, keyword.keyword, keyword);
+  });
+
+  fallbackKeywordVariants(primaryKeyword).forEach((keyword) => {
+    if (keywordMap.size >= 10 || keywordMap.has(keyword.toLowerCase())) {
+      return;
+    }
+
+    addKeyword(keywordMap, keyword, {
+      keyword,
+      source: "Suggested",
+    });
+  });
+
   return Array.from(keywordMap.values())
     .sort((a, b) => {
       const aScore = a.traffic ?? a.clicks ?? a.impressions ?? a.volume ?? 0;
       const bScore = b.traffic ?? b.clicks ?? b.impressions ?? b.volume ?? 0;
       return bScore - aScore;
     })
-    .slice(0, 20);
+    .slice(0, 12);
 }
 
 function todayMinusDays(days: number) {
@@ -175,7 +269,12 @@ function normalizePrivateKey(rawKey: string) {
 }
 
 async function fetchAhrefsEndpoint(
-  endpoint: "organic-keywords" | "top-pages" | "metrics",
+  endpoint:
+    | "organic-keywords"
+    | "top-pages"
+    | "metrics"
+    | "refdomains-history"
+    | "refdomains",
   params: Record<string, string>,
 ) {
   const apiKey = process.env.AHREFS_API_KEY;
@@ -214,13 +313,20 @@ async function fetchAhrefsEndpoint(
 export async function fetchAhrefsData(input: BlogRequest) {
   const target = cleanDomain(input.websiteDomain);
   const date = new Date().toISOString().slice(0, 10);
+  const dateFrom = todayMinusDays(93);
   const baseParams = {
     target,
     date,
-    limit: "20",
+    limit: "1000",
   };
 
-  const [organicKeywords, topPages, metrics] = await Promise.all([
+  const [
+    organicKeywords,
+    topPages,
+    metrics,
+    referringDomainsHistory,
+    referringDomains,
+  ] = await Promise.all([
     fetchAhrefsEndpoint("organic-keywords", {
       ...baseParams,
       select:
@@ -237,26 +343,50 @@ export async function fetchAhrefsData(input: BlogRequest) {
       target,
       date,
     }),
+    fetchAhrefsEndpoint("refdomains-history", {
+      target,
+      date_from: dateFrom,
+      date_to: date,
+    }),
+    fetchAhrefsEndpoint("refdomains", {
+      target,
+      date_from: dateFrom,
+      select: "domain,first_seen,new_links,lost_links,dofollow_links",
+      limit: "100",
+      order_by: "new_links:desc",
+    }),
   ]);
 
   return {
     organicKeywords,
     topPages,
     metrics,
+    referringDomainsHistory,
+    referringDomains,
   };
 }
 
-export async function fetchGoogleSearchConsoleData(input: BlogRequest) {
-  const clientEmail = process.env.GSC_CLIENT_EMAIL;
-  const privateKey = process.env.GSC_PRIVATE_KEY
-    ? normalizePrivateKey(process.env.GSC_PRIVATE_KEY)
-    : undefined;
+function resolveServiceAccountFile() {
+  return process.env.GSC_SERVICE_ACCOUNT_FILE || "gog-local-489321-f2ece1fd0e09.json";
+}
+
+function isPlaceholderValue(value: string | undefined) {
+  return !value || value.trim().startsWith("<") || value.trim().endsWith(">");
+}
+
+export async function fetchGoogleSearchConsoleData() {
+  const clientEmail = isPlaceholderValue(process.env.GSC_CLIENT_EMAIL)
+    ? undefined
+    : process.env.GSC_CLIENT_EMAIL;
+  const privateKey = isPlaceholderValue(process.env.GSC_PRIVATE_KEY)
+    ? undefined
+    : normalizePrivateKey(process.env.GSC_PRIVATE_KEY as string);
   const impersonationEmail = process.env.GSC_IMPERSONATION_EMAIL;
   const siteUrl = process.env.GSC_SITE_URL || "sc-domain:nobltravel.com";
   const endDate = todayMinusDays(3);
   const startDate = todayMinusDays(93);
 
-  if (process.env.GSC_USE_AUTH !== "true") {
+  if (process.env.GSC_USE_AUTH === "false") {
     return {
       startDate,
       endDate,
@@ -267,15 +397,33 @@ export async function fetchGoogleSearchConsoleData(input: BlogRequest) {
     };
   }
 
-  if (!clientEmail || !privateKey || !impersonationEmail) {
-    throw new Error(
-      "Missing Google Search Console service account environment variables.",
-    );
+  if (!impersonationEmail) {
+    return {
+      startDate,
+      endDate,
+      rows: [],
+      status: "skipped" as const,
+      note:
+        "Google Search Console skipped because the impersonation email is missing.",
+    };
+  }
+
+  const keyFile = clientEmail && privateKey ? undefined : resolveServiceAccountFile();
+
+  if (!clientEmail && !privateKey && keyFile && !fs.existsSync(keyFile)) {
+    return {
+      startDate,
+      endDate,
+      rows: [],
+      status: "skipped" as const,
+      note: `Google Search Console skipped because the service account file was not found at ${keyFile}.`,
+    };
   }
 
   const auth = new google.auth.JWT({
     email: clientEmail,
     key: privateKey,
+    keyFile,
     scopes: ["https://www.googleapis.com/auth/webmasters.readonly"],
     subject: impersonationEmail,
   });
@@ -290,18 +438,7 @@ export async function fetchGoogleSearchConsoleData(input: BlogRequest) {
         startDate,
         endDate,
         dimensions: ["query", "page"],
-        dimensionFilterGroups: [
-          {
-            filters: [
-              {
-                dimension: "query",
-                operator: "contains",
-                expression: input.mainKeyword,
-              },
-            ],
-          },
-        ],
-        rowLimit: 25,
+        rowLimit: 2500,
       },
     });
   } catch (error) {
@@ -326,7 +463,7 @@ export async function fetchGoogleSearchConsoleData(input: BlogRequest) {
 export async function fetchSeoData(input: BlogRequest): Promise<SeoData> {
   const [ahrefs, googleSearchConsole] = await Promise.all([
     fetchAhrefsData(input),
-    fetchGoogleSearchConsoleData(input),
+    fetchGoogleSearchConsoleData(),
   ]);
 
   return {
