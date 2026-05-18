@@ -54,31 +54,40 @@ const lengthOptions = [
 
 function formatBlogForCopy(blog: BlogResponse) {
   return [
-    `SEO title: ${blog.seoTitle}`,
-    `Meta title: ${blog.metaTitle}`,
-    `Meta description: ${blog.metaDescription}`,
-    `URL slug: ${blog.urlSlug}`,
+    "1. Intent Analysis",
+    blog.intentAnalysis,
     "",
-    "Blog outline:",
-    ...blog.blogOutline.map((item, index) => `${index + 1}. ${item}`),
+    "2. Full Outline with image placeholders, internal link slots, EEAT notes",
+    blog.fullOutline,
     "",
-    "Full blog article:",
-    blog.fullBlogArticle,
+    "3. Research & Evidence Plan",
+    blog.researchEvidencePlan,
     "",
-    "FAQ section:",
-    ...blog.faqSection.map(
-      (faq) => `Q: ${faq.question}\nA: ${faq.answer}`,
-    ),
+    "4. Complete Blog Post",
+    blog.completeBlogPost,
     "",
-    "Internal link suggestions:",
-    ...blog.internalLinkSuggestions.map(
-      (link) => `${link.anchorText} -> ${link.targetUrl}\n${link.reason}`,
-    ),
+    "5. SEO Block",
+    `Title tag: ${blog.seoBlock.metadata.titleTag}`,
+    `Meta description: ${blog.seoBlock.metadata.metaDescription}`,
+    `URL slug: ${blog.seoBlock.metadata.urlSlug}`,
     "",
-    `Image prompt: ${blog.imagePrompt}`,
+    "Keyword placement audit:",
+    blog.seoBlock.keywordPlacementAudit,
     "",
-    "SEO score suggestions:",
-    ...blog.seoScoreSuggestions.map((item) => `- ${item}`),
+    "Schema opportunities:",
+    blog.seoBlock.schemaOpportunities,
+    "",
+    "Internal linking summary:",
+    blog.seoBlock.internalLinkingSummary,
+    "",
+    "External linking suggestions:",
+    blog.seoBlock.externalLinkingSuggestions,
+    "",
+    "Image/alt text suggestions:",
+    blog.seoBlock.imageAltTextSuggestions,
+    "",
+    "6. Self-Check Results",
+    blog.selfCheckResults,
   ].join("\n");
 }
 
@@ -336,70 +345,72 @@ export default function Home() {
               </div>
             ) : (
               <article className="space-y-7">
-                <ResultBlock title="SEO title" content={blog.seoTitle} />
-                <ResultBlock title="Meta title" content={blog.metaTitle} />
                 <ResultBlock
-                  title="Meta description"
-                  content={blog.metaDescription}
+                  title="1. Intent Analysis"
+                  content={blog.intentAnalysis}
                 />
-                <ResultBlock title="URL slug" content={blog.urlSlug} mono />
-
-                <ResultList title="Blog outline" items={blog.blogOutline} />
+                <ResultBlock
+                  title="2. Full Outline"
+                  content={blog.fullOutline}
+                />
+                <ResultBlock
+                  title="3. Research & Evidence Plan"
+                  content={blog.researchEvidencePlan}
+                />
+                <ResultBlock
+                  title="4. Complete Blog Post"
+                  content={blog.completeBlogPost}
+                />
 
                 <section className="space-y-3">
-                  <h2 className="text-lg font-semibold">Full blog article</h2>
-                  <div className="whitespace-pre-wrap rounded-md border border-slate-200 bg-white p-4 text-sm leading-7 text-slate-700">
-                    {blog.fullBlogArticle}
+                  <h2 className="text-lg font-semibold">5. SEO Block</h2>
+                  <div className="space-y-3 rounded-md border border-slate-200 bg-white p-4 text-sm leading-7 text-slate-700">
+                    <p>
+                      <span className="font-medium text-slate-950">
+                        Title tag:
+                      </span>{" "}
+                      {blog.seoBlock.metadata.titleTag}
+                    </p>
+                    <p>
+                      <span className="font-medium text-slate-950">
+                        Meta description:
+                      </span>{" "}
+                      {blog.seoBlock.metadata.metaDescription}
+                    </p>
+                    <p>
+                      <span className="font-medium text-slate-950">
+                        URL slug:
+                      </span>{" "}
+                      <span className="font-mono">
+                        {blog.seoBlock.metadata.urlSlug}
+                      </span>
+                    </p>
+                    <SubBlock
+                      title="Keyword placement audit"
+                      content={blog.seoBlock.keywordPlacementAudit}
+                    />
+                    <SubBlock
+                      title="Schema opportunities"
+                      content={blog.seoBlock.schemaOpportunities}
+                    />
+                    <SubBlock
+                      title="Internal linking summary"
+                      content={blog.seoBlock.internalLinkingSummary}
+                    />
+                    <SubBlock
+                      title="External linking suggestions"
+                      content={blog.seoBlock.externalLinkingSuggestions}
+                    />
+                    <SubBlock
+                      title="Image/alt text suggestions"
+                      content={blog.seoBlock.imageAltTextSuggestions}
+                    />
                   </div>
                 </section>
 
-                <section className="space-y-3">
-                  <h2 className="text-lg font-semibold">FAQ section</h2>
-                  <div className="space-y-3">
-                    {blog.faqSection.map((faq) => (
-                      <div
-                        className="rounded-md border border-slate-200 bg-white p-4"
-                        key={faq.question}
-                      >
-                        <h3 className="font-medium text-slate-950">
-                          {faq.question}
-                        </h3>
-                        <p className="mt-2 text-sm leading-6 text-slate-600">
-                          {faq.answer}
-                        </p>
-                      </div>
-                    ))}
-                  </div>
-                </section>
-
-                <section className="space-y-3">
-                  <h2 className="text-lg font-semibold">
-                    Internal link suggestions
-                  </h2>
-                  <div className="space-y-3">
-                    {blog.internalLinkSuggestions.map((link) => (
-                      <div
-                        className="rounded-md border border-slate-200 bg-white p-4"
-                        key={`${link.anchorText}-${link.targetUrl}`}
-                      >
-                        <p className="font-medium text-slate-950">
-                          {link.anchorText}
-                        </p>
-                        <p className="mt-1 break-words font-mono text-xs text-emerald-700">
-                          {link.targetUrl}
-                        </p>
-                        <p className="mt-2 text-sm leading-6 text-slate-600">
-                          {link.reason}
-                        </p>
-                      </div>
-                    ))}
-                  </div>
-                </section>
-
-                <ResultBlock title="Image prompt" content={blog.imagePrompt} />
-                <ResultList
-                  title="SEO score suggestions"
-                  items={blog.seoScoreSuggestions}
+                <ResultBlock
+                  title="6. Self-Check Results"
+                  content={blog.selfCheckResults}
                 />
               </article>
             )}
@@ -421,40 +432,25 @@ function FieldError({ message }: { message?: string }) {
 function ResultBlock({
   title,
   content,
-  mono = false,
 }: {
   title: string;
   content: string;
-  mono?: boolean;
 }) {
   return (
     <section className="space-y-2">
       <h2 className="text-lg font-semibold">{title}</h2>
-      <p
-        className={`rounded-md border border-slate-200 bg-white p-4 text-sm leading-6 text-slate-700 ${
-          mono ? "font-mono" : ""
-        }`}
-      >
+      <div className="whitespace-pre-wrap rounded-md border border-slate-200 bg-white p-4 text-sm leading-7 text-slate-700">
         {content}
-      </p>
+      </div>
     </section>
   );
 }
 
-function ResultList({ title, items }: { title: string; items: string[] }) {
+function SubBlock({ title, content }: { title: string; content: string }) {
   return (
-    <section className="space-y-3">
-      <h2 className="text-lg font-semibold">{title}</h2>
-      <ol className="space-y-2">
-        {items.map((item) => (
-          <li
-            className="rounded-md border border-slate-200 bg-white p-4 text-sm leading-6 text-slate-700"
-            key={item}
-          >
-            {item}
-          </li>
-        ))}
-      </ol>
-    </section>
+    <div className="border-t border-slate-100 pt-3">
+      <h3 className="font-medium text-slate-950">{title}</h3>
+      <p className="mt-1 whitespace-pre-wrap text-slate-700">{content}</p>
+    </div>
   );
 }

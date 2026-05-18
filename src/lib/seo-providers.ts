@@ -12,6 +12,8 @@ type GscPayload = {
   startDate: string;
   endDate: string;
   rows: unknown[];
+  status?: "skipped";
+  note?: string;
 };
 
 export type SeoData = {
@@ -31,6 +33,46 @@ function cleanDomain(domain: string) {
     .replace(/^https?:\/\//i, "")
     .replace(/^www\./i, "")
     .replace(/\/.*$/, "");
+}
+
+function normalizePrivateKey(rawKey: string) {
+  let key = rawKey.trim();
+
+  if (
+    (key.startsWith('"') && key.endsWith('"')) ||
+    (key.startsWith("'") && key.endsWith("'"))
+  ) {
+    key = key.slice(1, -1);
+  }
+
+  key = key.replace(/\\n/g, "\n");
+
+  if (key.includes("BEGIN PRIVATE KEY")) {
+    return key;
+  }
+
+  try {
+    const decoded = Buffer.from(key, "base64").toString("utf8").trim();
+    const parsed = JSON.parse(decoded) as { private_key?: string };
+
+    if (parsed.private_key) {
+      return parsed.private_key.replace(/\\n/g, "\n");
+    }
+  } catch {
+    // Not a base64-encoded service account JSON value.
+  }
+
+  try {
+    const parsed = JSON.parse(key) as { private_key?: string };
+
+    if (parsed.private_key) {
+      return parsed.private_key.replace(/\\n/g, "\n");
+    }
+  } catch {
+    // Not a raw service account JSON value.
+  }
+
+  return key;
 }
 
 async function fetchAhrefsEndpoint(
@@ -59,7 +101,12 @@ async function fetchAhrefsEndpoint(
 
   if (!response.ok) {
     const body = await response.text();
-    throw new Error(`Ahrefs ${endpoint} failed: ${response.status} ${body}`);
+    let errorMessage = body;
+    try {
+      const parsed = JSON.parse(body);
+      if (parsed.error) errorMessage = parsed.error;
+    } catch {}
+    throw new Error(`Ahrefs ${endpoint} failed: ${response.status} ${errorMessage}`);
   }
 
   return response.json();
@@ -67,7 +114,7 @@ async function fetchAhrefsEndpoint(
 
 export async function fetchAhrefsData(input: BlogRequest) {
   const target = cleanDomain(input.websiteDomain);
-  const date = todayMinusDays(1);
+  const date = new Date().toISOString().slice(0, 10);
   const baseParams = {
     target,
     date,
@@ -77,9 +124,16 @@ export async function fetchAhrefsData(input: BlogRequest) {
   const [organicKeywords, topPages, metrics] = await Promise.all([
     fetchAhrefsEndpoint("organic-keywords", {
       ...baseParams,
-      country: "us",
+      select:
+        "keyword,best_position,best_position_url,volume,keyword_difficulty,sum_traffic,best_position_kind",
+      order_by: "sum_traffic:desc",
     }),
-    fetchAhrefsEndpoint("top-pages", baseParams),
+    fetchAhrefsEndpoint("top-pages", {
+      ...baseParams,
+      select:
+        "url,sum_traffic,keywords,top_keyword,top_keyword_volume,top_keyword_best_position,referring_domains,ur",
+      order_by: "sum_traffic:desc",
+    }),
     fetchAhrefsEndpoint("metrics", {
       target,
       date,
@@ -95,18 +149,30 @@ export async function fetchAhrefsData(input: BlogRequest) {
 
 export async function fetchGoogleSearchConsoleData(input: BlogRequest) {
   const clientEmail = process.env.GSC_CLIENT_EMAIL;
-  const privateKey = process.env.GSC_PRIVATE_KEY?.replace(/\\n/g, "\n");
+  const privateKey = process.env.GSC_PRIVATE_KEY
+    ? normalizePrivateKey(process.env.GSC_PRIVATE_KEY)
+    : undefined;
   const impersonationEmail = process.env.GSC_IMPERSONATION_EMAIL;
   const siteUrl = process.env.GSC_SITE_URL || "sc-domain:nobltravel.com";
+  const endDate = todayMinusDays(3);
+  const startDate = todayMinusDays(93);
+
+  if (process.env.GSC_USE_AUTH !== "true") {
+    return {
+      startDate,
+      endDate,
+      rows: [],
+      status: "skipped" as const,
+      note:
+        "Google Search Console auth is skipped for this local run; do not treat rows as live GSC data.",
+    };
+  }
 
   if (!clientEmail || !privateKey || !impersonationEmail) {
     throw new Error(
       "Missing Google Search Console service account environment variables.",
     );
   }
-
-  const endDate = todayMinusDays(3);
-  const startDate = todayMinusDays(93);
 
   const auth = new google.auth.JWT({
     email: clientEmail,
@@ -116,26 +182,40 @@ export async function fetchGoogleSearchConsoleData(input: BlogRequest) {
   });
 
   const searchconsole = google.searchconsole({ version: "v1", auth });
-  const response = await searchconsole.searchanalytics.query({
-    siteUrl,
-    requestBody: {
-      startDate,
-      endDate,
-      dimensions: ["query", "page"],
-      dimensionFilterGroups: [
-        {
-          filters: [
-            {
-              dimension: "query",
-              operator: "contains",
-              expression: input.mainKeyword,
-            },
-          ],
-        },
-      ],
-      rowLimit: 25,
-    },
-  });
+  let response;
+
+  try {
+    response = await searchconsole.searchanalytics.query({
+      siteUrl,
+      requestBody: {
+        startDate,
+        endDate,
+        dimensions: ["query", "page"],
+        dimensionFilterGroups: [
+          {
+            filters: [
+              {
+                dimension: "query",
+                operator: "contains",
+                expression: input.mainKeyword,
+              },
+            ],
+          },
+        ],
+        rowLimit: 25,
+      },
+    });
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "";
+
+    if (message.includes("DECODER routines")) {
+      throw new Error(
+        "Google Search Console private key could not be parsed. Set GSC_PRIVATE_KEY to the service account private_key with escaped newlines, or paste a base64-encoded service account JSON.",
+      );
+    }
+
+    throw error;
+  }
 
   return {
     startDate,

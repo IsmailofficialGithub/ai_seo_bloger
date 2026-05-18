@@ -5,7 +5,14 @@ export const blogRequestSchema = z.object({
     .string()
     .trim()
     .min(3, "Enter a valid website domain.")
-    .max(120, "Domain is too long."),
+    .max(120, "Domain is too long.")
+    .refine((val) => {
+      const cleaned = val
+        .replace(/^https?:\/\//i, "")
+        .replace(/^www\./i, "")
+        .replace(/\/.*$/, "");
+      return cleaned.includes(".");
+    }, "Enter a valid website domain (e.g., example.com)."),
   mainKeyword: z
     .string()
     .trim()
@@ -27,27 +34,23 @@ export const blogRequestSchema = z.object({
 });
 
 export const blogResponseSchema = z.object({
-  seoTitle: z.string(),
-  metaTitle: z.string(),
-  metaDescription: z.string(),
-  urlSlug: z.string(),
-  blogOutline: z.array(z.string()),
-  fullBlogArticle: z.string(),
-  faqSection: z.array(
-    z.object({
-      question: z.string(),
-      answer: z.string(),
+  intentAnalysis: z.string(),
+  fullOutline: z.string(),
+  researchEvidencePlan: z.string(),
+  completeBlogPost: z.string(),
+  seoBlock: z.object({
+    metadata: z.object({
+      titleTag: z.string(),
+      metaDescription: z.string(),
+      urlSlug: z.string(),
     }),
-  ),
-  internalLinkSuggestions: z.array(
-    z.object({
-      anchorText: z.string(),
-      targetUrl: z.string(),
-      reason: z.string(),
-    }),
-  ),
-  imagePrompt: z.string(),
-  seoScoreSuggestions: z.array(z.string()),
+    keywordPlacementAudit: z.string(),
+    schemaOpportunities: z.string(),
+    internalLinkingSummary: z.string(),
+    externalLinkingSuggestions: z.string(),
+    imageAltTextSuggestions: z.string(),
+  }),
+  selfCheckResults: z.string(),
 });
 
 export type BlogRequest = z.infer<typeof blogRequestSchema>;

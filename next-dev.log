@@ -1,0 +1,21 @@
+
+> ai_seo_bloger@0.1.0 dev
+> next dev --hostname 127.0.0.1 --port 3000
+
+▲ Next.js 16.2.6 (Turbopack)
+- Local:         http://127.0.0.1:3000
+- Network:       http://127.0.0.1:3000
+- Environments: .env.local
+✓ Ready in 1800ms
+Creating turbopack project { dir: 'E:\\coding\\ai_seo_bloger', testMode: true }
+
+ GET / 200 in 1519ms (next.js: 593ms, application-code: 926ms)
+ GET / 200 in 240ms (next.js: 13ms, application-code: 227ms)
+ GET / 200 in 405ms (next.js: 20ms, application-code: 385ms)
+ GET / 200 in 1196ms (next.js: 1136ms, application-code: 60ms)
+ GET / 200 in 523ms (next.js: 42ms, application-code: 481ms)
+ POST /api/generate-blog 400 in 5.0s (next.js: 4.9s, application-code: 130ms)
+ GET / 200 in 1061ms (next.js: 769ms, application-code: 292ms)
+ GET / 200 in 1511ms (next.js: 106ms, application-code: 1406ms)
+ POST /api/generate-blog 400 in 5.3s (next.js: 4.8s, application-code: 549ms)
+[?25h
